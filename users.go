@@ -26,7 +26,7 @@ import (
 )
 
 func UsersData() []byte {
-        cmd := exec.Command("squeue","-a","-r","-h","-o %A|%u|%T|%C")
+        cmd := exec.Command("squeue","-a","-r","-h","--noconvert","-o %A|%u|%T|%C|%m")
         stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -44,8 +44,10 @@ func UsersData() []byte {
 type UserJobMetrics struct {
         pending float64
         pending_cpus float64
+        pending_memory float64
         running float64
         running_cpus float64
+        running_memory float64
         suspended float64
 }
 
@@ -57,11 +59,12 @@ func ParseUsersMetrics(input []byte) map[string]*UserJobMetrics {
                         user := strings.Split(line,"|")[1]
                         _,key := users[user]
                         if !key {
-                                users[user] = &UserJobMetrics{0,0,0,0,0}
+                                users[user] = &UserJobMetrics{0,0,0,0,0,0,0}
                         }
                         state := strings.Split(line,"|")[2]
                         state = strings.ToLower(state)
                         cpus,_ := strconv.ParseFloat(strings.Split(line,"|")[3],64)
+                        memory,_ := strconv.ParseFloat(strings.TrimSuffix(strings.Split(line,"|")[4],"M"),64)
                         pending := regexp.MustCompile(`^pending`)
                         running := regexp.MustCompile(`^running`)
                         suspended := regexp.MustCompile(`^suspended`)
@@ -69,9 +72,11 @@ func ParseUsersMetrics(input []byte) map[string]*UserJobMetrics {
                         case pending.MatchString(state) == true:
                                 users[user].pending++
                                 users[user].pending_cpus += cpus
+                                users[user].pending_memory += memory
                         case running.MatchString(state) == true:
                                 users[user].running++
                                 users[user].running_cpus += cpus
+                                users[user].running_memory += memory
                         case suspended.MatchString(state) == true:
                                 users[user].suspended++
                         }
@@ -83,8 +88,10 @@ func ParseUsersMetrics(input []byte) map[string]*UserJobMetrics {
 type UsersCollector struct {
         pending *prometheus.Desc
         pending_cpus *prometheus.Desc
+        pending_memory *prometheus.Desc
         running *prometheus.Desc
         running_cpus *prometheus.Desc
+        running_memory *prometheus.Desc
         suspended *prometheus.Desc
 }
 
@@ -93,8 +100,10 @@ func NewUsersCollector() *UsersCollector {
         return &UsersCollector {
                 pending: prometheus.NewDesc("slurm_user_jobs_pending", "Pending jobs for user", labels, nil), 
                 pending_cpus: prometheus.NewDesc("slurm_user_cpus_pending", "Pending jobs for user", labels, nil), 
+                pending_memory: prometheus.NewDesc("slurm_user_memory_pending", "Pending jobs for user", labels, nil),
                 running: prometheus.NewDesc("slurm_user_jobs_running", "Running jobs for user", labels, nil),
                 running_cpus: prometheus.NewDesc("slurm_user_cpus_running", "Running cpus for user", labels, nil),
+                running_memory: prometheus.NewDesc("slurm_user_memory_running", "Running memory for user", labels, nil),
                 suspended: prometheus.NewDesc("slurm_user_jobs_suspended", "Suspended jobs for user", labels, nil),
         }
 }
@@ -102,8 +111,10 @@ func NewUsersCollector() *UsersCollector {
 func (uc *UsersCollector) Describe(ch chan<- *prometheus.Desc) {
         ch <- uc.pending
         ch <- uc.pending_cpus
+        ch <- uc.pending_memory
         ch <- uc.running
         ch <- uc.running_cpus
+        ch <- uc.running_memory
         ch <- uc.suspended
 }
 
@@ -116,11 +127,17 @@ func (uc *UsersCollector) Collect(ch chan<- prometheus.Metric) {
                 if um[u].pending_cpus > 0 {
                         ch <- prometheus.MustNewConstMetric(uc.pending_cpus, prometheus.GaugeValue, um[u].pending_cpus, u)
                 }
+                if um[u].pending_memory > 0 {
+                        ch <- prometheus.MustNewConstMetric(uc.pending_memory, prometheus.GaugeValue, um[u].pending_memory, u)
+                }
                 if um[u].running > 0 {
                         ch <- prometheus.MustNewConstMetric(uc.running, prometheus.GaugeValue, um[u].running, u)
                 }
                 if um[u].running_cpus > 0 {
                         ch <- prometheus.MustNewConstMetric(uc.running_cpus, prometheus.GaugeValue, um[u].running_cpus, u)
+                }
+                if um[u].running_memory > 0 {
+                        ch <- prometheus.MustNewConstMetric(uc.running_memory, prometheus.GaugeValue, um[u].running_memory, u)
                 }
                 if um[u].suspended > 0 {
                         ch <- prometheus.MustNewConstMetric(uc.suspended, prometheus.GaugeValue, um[u].suspended, u)
