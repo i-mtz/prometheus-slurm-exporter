@@ -37,41 +37,63 @@ func TestParseUsersMetrics(t *testing.T) {
 	metrics := ParseUsersMetrics(data)
 	t.Logf("%+v", metrics)
 
-	assert.Equal(t, 9, len(metrics))
+	assert.Equal(t, 7, len(metrics))
 
-	// user1/group1/a100-1week: 1 PENDING job, 8 cpus, 65536M
-	m := metrics["user1|group1|a100-1week"]
+	// user3/account3/titan-6hours: 2 PENDING jobs, 8 cpus, 49152M, 2 gpus
+	m := metrics["user3|account3|titan-6hours"]
 	assert.NotNil(t, m)
-	assert.Equal(t, float64(1), m.pending)
+	assert.Equal(t, float64(2), m.pending)
 	assert.Equal(t, float64(8), m.pending_cpus)
-	assert.Equal(t, float64(65536), m.pending_memory)
+	assert.Equal(t, float64(49152), m.pending_memory)
+	assert.Equal(t, float64(2), m.pending_gpus)
 
-	// user2/group2/a100-1day: 16 PENDING jobs, 192 cpus, 1392640M
-	m = metrics["user2|group2|a100-1day"]
+	// user3/account3/titan-1day: 2 RUNNING jobs, 8 cpus, 49152M, 2 gpus
+	m = metrics["user3|account3|titan-1day"]
 	assert.NotNil(t, m)
-	assert.Equal(t, float64(16), m.pending)
-	assert.Equal(t, float64(192), m.pending_cpus)
-	assert.Equal(t, float64(1392640), m.pending_memory)
+	assert.Equal(t, float64(2), m.running)
+	assert.Equal(t, float64(8), m.running_cpus)
+	assert.Equal(t, float64(49152), m.running_memory)
+	assert.Equal(t, float64(2), m.running_gpus)
 
-	// user3/group3/fast: 38 RUNNING jobs, 152 cpus, 311296M
-	m = metrics["user3|group3|fast"]
+	// user2/account2/2weeks: 5 PENDING jobs, 640 cpus, 20480M, no gpus (N/A)
+	m = metrics["user2|account2|2weeks"]
 	assert.NotNil(t, m)
-	assert.Equal(t, float64(38), m.running)
-	assert.Equal(t, float64(152), m.running_cpus)
-	assert.Equal(t, float64(311296), m.running_memory)
+	assert.Equal(t, float64(5), m.pending)
+	assert.Equal(t, float64(640), m.pending_cpus)
+	assert.Equal(t, float64(20480), m.pending_memory)
+	assert.Equal(t, float64(0), m.pending_gpus)
 
-	// user7/group7 is split across two qos values
-	m = metrics["user7|group7|titan-6hours"]
+	// user5/account5/titan-1day: 7 RUNNING jobs, 14 cpus, 344064M, 7 gpus
+	m = metrics["user5|account5|titan-1day"]
 	assert.NotNil(t, m)
-	assert.Equal(t, float64(9), m.running)
-	assert.Equal(t, float64(18), m.running_cpus)
-	assert.Equal(t, float64(442368), m.running_memory)
+	assert.Equal(t, float64(7), m.running)
+	assert.Equal(t, float64(14), m.running_cpus)
+	assert.Equal(t, float64(344064), m.running_memory)
+	assert.Equal(t, float64(7), m.running_gpus)
 
-	m = metrics["user7|group7|titan-1day"]
+	// user5/account5/titan-6hours: 17 RUNNING jobs, 34 cpus, 835584M, 17 gpus
+	m = metrics["user5|account5|titan-6hours"]
 	assert.NotNil(t, m)
-	assert.Equal(t, float64(15), m.running)
-	assert.Equal(t, float64(30), m.running_cpus)
-	assert.Equal(t, float64(737280), m.running_memory)
+	assert.Equal(t, float64(17), m.running)
+	assert.Equal(t, float64(34), m.running_cpus)
+	assert.Equal(t, float64(835584), m.running_memory)
+	assert.Equal(t, float64(17), m.running_gpus)
+
+	// user1/account1/1week: 1 RUNNING job, 16 cpus, 40960M, no gpus (N/A)
+	m = metrics["user1|account1|1week"]
+	assert.NotNil(t, m)
+	assert.Equal(t, float64(1), m.running)
+	assert.Equal(t, float64(16), m.running_cpus)
+	assert.Equal(t, float64(40960), m.running_memory)
+	assert.Equal(t, float64(0), m.running_gpus)
+
+	// user4/account4/titan-6hours: 1 RUNNING job, 4 cpus, 61440M, 1 gpu
+	m = metrics["user4|account4|titan-6hours"]
+	assert.NotNil(t, m)
+	assert.Equal(t, float64(1), m.running)
+	assert.Equal(t, float64(4), m.running_cpus)
+	assert.Equal(t, float64(61440), m.running_memory)
+	assert.Equal(t, float64(1), m.running_gpus)
 
 	// Verify the stored dimensions match the key
 	for key, m := range metrics {
@@ -80,4 +102,12 @@ func TestParseUsersMetrics(t *testing.T) {
 		assert.Equal(t, parts[1], m.account)
 		assert.Equal(t, parts[2], m.qos)
 	}
+}
+
+func TestParseGpuCount(t *testing.T) {
+	assert.Equal(t, float64(0), parseGpuCount("N/A"))
+	assert.Equal(t, float64(4), parseGpuCount("gres/gpu:4"))
+	assert.Equal(t, float64(1), parseGpuCount("gres/gpu:titan:1"))
+	assert.Equal(t, float64(16), parseGpuCount("gres/gpu:titan:16"))
+	assert.Equal(t, float64(0), parseGpuCount("cpu:8+mem:1024M"))
 }
